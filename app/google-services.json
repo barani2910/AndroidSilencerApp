@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "159750861640",
+    "project_id": "silencerapp-9e03d",
+    "storage_bucket": "silencerapp-9e03d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159750861640:android:79f80046a655e2e816397d",
+        "android_client_info": {
+          "package_name": "com.example.AndroidSilencerapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgvuq5y1K2Vu-Udk7ljDNGVxBe0uMdfoI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159750861640:android:ca3095918cdc210716397d",
+        "android_client_info": {
+          "package_name": "com.example.Androidsilencerapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgvuq5y1K2Vu-Udk7ljDNGVxBe0uMdfoI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159750861640:android:3771788cd261b69216397d",
+        "android_client_info": {
+          "package_name": "com.example.silencerapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgvuq5y1K2Vu-Udk7ljDNGVxBe0uMdfoI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

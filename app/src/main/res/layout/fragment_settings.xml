@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Settings"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="24dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnPermissionManager"
+        style="@style/Widget.Material3.Button.TextButton.Icon"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permission Manager"
+        android:textAlignment="viewStart"
+        android:padding="16dp"
+        android:icon="@android:drawable/ic_lock_power_off" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCloudSync"
+        style="@style/Widget.Material3.Button.TextButton.Icon"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cloud Sync Settings"
+        android:textAlignment="viewStart"
+        android:padding="16dp"
+        android:icon="@android:drawable/ic_popup_sync" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnEmergencyBypass"
+        style="@style/Widget.Material3.Button.TextButton.Icon"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Emergency Bypass"
+        android:textAlignment="viewStart"
+        android:padding="16dp"
+        android:icon="@android:drawable/ic_menu_call" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnHelp"
+        style="@style/Widget.Material3.Button.TextButton.Icon"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Help &amp; About"
+        android:textAlignment="viewStart"
+        android:padding="16dp"
+        android:icon="@android:drawable/ic_menu_help" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnLogout"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Logout"
+        android:textColor="?attr/colorError"
+        android:layout_marginBottom="16dp" />
+
+</LinearLayout>
