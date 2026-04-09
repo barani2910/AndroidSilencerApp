@@ -1,50 +1,68 @@
 package com.example.androidsilencerapp.engine
 
 import android.app.NotificationManager
+import android.content.Context
 import android.media.AudioManager
+import android.util.Log
 
 class SmartRestoreEngine(
+    private val context: Context,
     private val audioManager: AudioManager,
     private val notificationManager: NotificationManager? = null
 ) {
+    private val prefs = context.getSharedPreferences("smart_restore_prefs", Context.MODE_PRIVATE)
+    private val TAG = "SmartRestoreEngine"
 
-    private var ringerModeSnapshot: Int? = null
-    private var ringVolumeSnapshot: Int? = null
-    private var mediaVolumeSnapshot: Int? = null
-    private var notificationVolumeSnapshot: Int? = null
-    private var dndSnapshot: Int? = null
-
-    private var snapshotTaken = false
+    fun isSnapshotTaken(): Boolean = prefs.getBoolean("snapshot_taken", false)
 
     fun takeSnapshot() {
-        ringerModeSnapshot = audioManager.ringerMode
-        ringVolumeSnapshot = audioManager.getStreamVolume(AudioManager.STREAM_RING)
-        mediaVolumeSnapshot = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        notificationVolumeSnapshot = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
-        
-        dndSnapshot = notificationManager?.currentInterruptionFilter
-        
-        snapshotTaken = true
+        if (isSnapshotTaken()) return
+
+        try {
+            prefs.edit()
+                .putInt("ringer_mode", audioManager.ringerMode)
+                .putInt("ring_vol", audioManager.getStreamVolume(AudioManager.STREAM_RING))
+                .putInt("media_vol", audioManager.getStreamVolume(AudioManager.STREAM_MUSIC))
+                .putInt("notif_vol", audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION))
+                .putInt("dnd_filter", notificationManager?.currentInterruptionFilter ?: -1)
+                .putBoolean("snapshot_taken", true)
+                .apply()
+            Log.d(TAG, "Snapshot taken successfully: RingerMode=${audioManager.ringerMode}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to take snapshot", e)
+        }
     }
 
     fun restore() {
-        dndSnapshot?.let { notificationManager?.setInterruptionFilter(it) }
-        
-        ringerModeSnapshot?.let { audioManager.ringerMode = it }
-        ringVolumeSnapshot?.let { audioManager.setStreamVolume(AudioManager.STREAM_RING, it, 0) }
-        mediaVolumeSnapshot?.let { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
-        notificationVolumeSnapshot?.let { audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, it, 0) }
-        clearSnapshot()
+        if (!isSnapshotTaken()) {
+            Log.d(TAG, "No snapshot to restore")
+            return
+        }
+
+        try {
+            val dnd = prefs.getInt("dnd_filter", -1)
+            if (dnd != -1 && notificationManager?.isNotificationPolicyAccessGranted == true) {
+                notificationManager.setInterruptionFilter(dnd)
+            }
+
+            val ringerMode = prefs.getInt("ringer_mode", AudioManager.RINGER_MODE_NORMAL)
+            audioManager.ringerMode = ringerMode
+            
+            // Restore volumes only if ringer mode allows
+            if (ringerMode == AudioManager.RINGER_MODE_NORMAL) {
+                audioManager.setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("ring_vol", 0), 0)
+                audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("notif_vol", 0), 0)
+            }
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("media_vol", 0), 0)
+            
+            clearSnapshot()
+            Log.d(TAG, "Snapshot restored successfully: RingerMode=$ringerMode")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restore snapshot", e)
+        }
     }
 
-    fun isSnapshotTaken(): Boolean = snapshotTaken
-
-    private fun clearSnapshot() {
-        ringerModeSnapshot = null
-        ringVolumeSnapshot = null
-        mediaVolumeSnapshot = null
-        notificationVolumeSnapshot = null
-        dndSnapshot = null
-        snapshotTaken = false
+    fun clearSnapshot() {
+        prefs.edit().putBoolean("snapshot_taken", false).apply()
     }
 }

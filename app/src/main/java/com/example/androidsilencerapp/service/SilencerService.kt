@@ -62,7 +62,7 @@ class SilencerService : LifecycleService() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         db = AppDatabase.getDatabase(this)
         
-        smartRestoreEngine = SmartRestoreEngine(audioManager, notificationManager)
+        smartRestoreEngine = SmartRestoreEngine(this, audioManager, notificationManager)
         calendarManager = CalendarManager(this)
         
         priorityResolutionEngine = PriorityResolutionEngine()
@@ -110,16 +110,22 @@ class SilencerService : LifecycleService() {
         val winningProfile = priorityResolutionEngine.resolve(activeProfiles)
 
         if (winningProfile != null) {
-            if (activeProfileId != winningProfile.id) {
+            // Re-apply if device state doesn't match desired state
+            if (activeProfileId != winningProfile.id || !isDeviceInState(winningProfile)) {
                 applyProfile(winningProfile)
                 activeProfileId = winningProfile.id
             }
         } else {
-            if (activeProfileId != null) {
+            if (activeProfileId != null || smartRestoreEngine.isSnapshotTaken()) {
                 restoreOriginalState()
                 activeProfileId = null
             }
         }
+    }
+
+    private fun isDeviceInState(profile: Profile): Boolean {
+        val targetRinger = if (profile.soundMode == AddProfileFragment.MODE_DND) AudioManager.RINGER_MODE_SILENT else profile.soundMode
+        return audioManager.ringerMode == targetRinger
     }
 
     private fun applyProfile(profile: Profile) {
@@ -129,37 +135,36 @@ class SilencerService : LifecycleService() {
         
         Log.d(tag, "Applying profile: ${profile.name} (SoundMode: ${profile.soundMode})")
         
+        val hasDndPermission = notificationManager.isNotificationPolicyAccessGranted
+        
         try {
-            val hasDndPermission = notificationManager.isNotificationPolicyAccessGranted
-
-            // Force DND OFF for all modes except explicit DND
-            if (hasDndPermission) {
-                val targetFilter = if (profile.soundMode == AddProfileFragment.MODE_DND) {
-                    NotificationManager.INTERRUPTION_FILTER_PRIORITY
-                } else {
-                    NotificationManager.INTERRUPTION_FILTER_ALL
+            when (profile.soundMode) {
+                AddProfileFragment.MODE_DND -> {
+                    if (hasDndPermission) {
+                        notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                    }
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
                 }
-                
-                if (notificationManager.currentInterruptionFilter != targetFilter) {
-                    notificationManager.setInterruptionFilter(targetFilter)
-                }
-            }
-
-            // Apply Ringer Mode
-            if (profile.soundMode != AddProfileFragment.MODE_DND) {
-                if (audioManager.ringerMode != profile.soundMode) {
-                    if (profile.soundMode == AudioManager.RINGER_MODE_SILENT && !hasDndPermission) {
-                        audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                        updateNotification("DND Access required for Silent mode. Used Vibrate.")
+                AudioManager.RINGER_MODE_SILENT -> {
+                    if (hasDndPermission) {
+                        // For true silent mode on many modern Androids, 
+                        // setting RINGER_MODE_SILENT triggers DND icons.
+                        // We don't force INTERRUPTION_FILTER_ALL here because it often flips back to VIBRATE.
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
                     } else {
-                        audioManager.ringerMode = profile.soundMode
-                        logAutomation(profile, "Activated (${getModeName(profile.soundMode)})")
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                        updateNotification("Grant DND permission for Silent mode")
                     }
                 }
-            } else {
-                logAutomation(profile, "Activated (DND)")
+                else -> { // VIBRATE or NORMAL
+                    if (hasDndPermission) {
+                        notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+                    }
+                    audioManager.ringerMode = profile.soundMode
+                }
             }
 
+            logAutomation(profile, "Activated (${getModeName(profile.soundMode)})")
             updateNotification("Active Profile: ${profile.name}")
         } catch (e: Exception) {
             Log.e(tag, "Failed to apply sound mode", e)
@@ -223,7 +228,11 @@ class SilencerService : LifecycleService() {
             }
         }
         val notification = createNotification(content)
-        notificationManager.notify(notificationId, notification)
+        try {
+            notificationManager.notify(notificationId, notification)
+        } catch (e: SecurityException) {
+            Log.e(tag, "Notification permission missing", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
