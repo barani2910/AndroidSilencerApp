@@ -20,6 +20,7 @@ import com.example.androidsilencerapp.data.local.AppDatabase
 import com.example.androidsilencerapp.data.model.AutomationLog
 import com.example.androidsilencerapp.data.model.Profile
 import com.example.androidsilencerapp.engine.*
+import com.example.androidsilencerapp.receiver.EmergencyReceiver
 import com.example.androidsilencerapp.ui.profile.AddProfileFragment
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
@@ -49,12 +50,11 @@ class SilencerService : LifecycleService() {
     private val evaluationRunnable = object : Runnable {
         override fun run() {
             reEvaluateCurrentProfiles()
-            handler.postDelayed(this, 2000)
+            handler.postDelayed(this, 30000)
         }
     }
 
     private var latestProfiles: List<Profile> = emptyList()
-    private var activeProfileId: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -62,9 +62,8 @@ class SilencerService : LifecycleService() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         db = AppDatabase.getDatabase(this)
         
-        smartRestoreEngine = SmartRestoreEngine(this, audioManager, notificationManager)
         calendarManager = CalendarManager(this)
-        
+        smartRestoreEngine = SmartRestoreEngine(this, audioManager, notificationManager)
         priorityResolutionEngine = PriorityResolutionEngine()
         automationEngine = AutomationEngine(this, calendarManager)
         geofenceManager = GeofenceManager(this)
@@ -88,16 +87,9 @@ class SilencerService : LifecycleService() {
             if (userId != null) {
                 serviceScope.launch {
                     db.profileDao().getProfilesForUser(userId).asFlow().collectLatest { profiles ->
-                        val locationTriggersChanged = profiles.map { "${it.id}${it.latitude}${it.longitude}${it.radius}" } != 
-                                                    latestProfiles.map { "${it.id}${it.latitude}${it.longitude}${it.radius}" }
-                        
                         latestProfiles = profiles
-                        
-                        if (locationTriggersChanged) {
-                            geofenceManager.removeAllGeofences()
-                            geofenceManager.addGeofences(profiles)
-                        }
-                        
+                        geofenceManager.removeAllGeofences()
+                        geofenceManager.addGeofences(profiles)
                         reEvaluateCurrentProfiles()
                     }
                 }
@@ -106,84 +98,59 @@ class SilencerService : LifecycleService() {
     }
 
     private fun reEvaluateCurrentProfiles() {
+        // IMPORTANT: If an emergency bypass is active, do not apply any silencing profiles
+        val bypassEngine = EmergencyReceiver.getEngine(this)
+        if (bypassEngine.isBypassActive()) {
+            Log.d(tag, "Bypass active: Skipping profile application")
+            updateNotification("Emergency Bypass Active")
+            return
+        }
+
         val activeProfiles = latestProfiles.filter { automationEngine.isProfileActive(it) }
         val winningProfile = priorityResolutionEngine.resolve(activeProfiles)
 
         if (winningProfile != null) {
-            // Re-apply if device state doesn't match desired state
-            if (activeProfileId != winningProfile.id || !isDeviceInState(winningProfile)) {
-                applyProfile(winningProfile)
-                activeProfileId = winningProfile.id
-            }
+            applyProfile(winningProfile)
         } else {
-            if (activeProfileId != null || smartRestoreEngine.isSnapshotTaken()) {
+            if (smartRestoreEngine.isSnapshotTaken()) {
                 restoreOriginalState()
-                activeProfileId = null
             }
         }
     }
 
-    private fun isDeviceInState(profile: Profile): Boolean {
-        val targetRinger = if (profile.soundMode == AddProfileFragment.MODE_DND) AudioManager.RINGER_MODE_SILENT else profile.soundMode
-        return audioManager.ringerMode == targetRinger
-    }
-
     private fun applyProfile(profile: Profile) {
+        if (!notificationManager.isNotificationPolicyAccessGranted) {
+            updateNotification("Error: Grant DND permission in Settings")
+            return
+        }
+
         if (!smartRestoreEngine.isSnapshotTaken()) {
             smartRestoreEngine.takeSnapshot()
         }
         
-        Log.d(tag, "Applying profile: ${profile.name} (SoundMode: ${profile.soundMode})")
-        
-        val hasDndPermission = notificationManager.isNotificationPolicyAccessGranted
-        
         try {
-            when (profile.soundMode) {
-                AddProfileFragment.MODE_DND -> {
-                    if (hasDndPermission) {
-                        notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
-                    }
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+            if (profile.soundMode == AddProfileFragment.MODE_DND) {
+                notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+            } else {
+                if (notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
+                    notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
                 }
-                AudioManager.RINGER_MODE_SILENT -> {
-                    if (hasDndPermission) {
-                        // For true silent mode on many modern Androids, 
-                        // setting RINGER_MODE_SILENT triggers DND icons.
-                        // We don't force INTERRUPTION_FILTER_ALL here because it often flips back to VIBRATE.
-                        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
-                    } else {
-                        audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                        updateNotification("Grant DND permission for Silent mode")
-                    }
-                }
-                else -> { // VIBRATE or NORMAL
-                    if (hasDndPermission) {
-                        notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
-                    }
+                
+                if (audioManager.ringerMode != profile.soundMode) {
                     audioManager.ringerMode = profile.soundMode
+                    logAutomation(profile, "Activated")
                 }
             }
-
-            logAutomation(profile, "Activated (${getModeName(profile.soundMode)})")
             updateNotification("Active Profile: ${profile.name}")
         } catch (e: Exception) {
             Log.e(tag, "Failed to apply sound mode", e)
         }
     }
 
-    private fun getModeName(mode: Int): String {
-        return when (mode) {
-            AudioManager.RINGER_MODE_SILENT -> "Silent"
-            AudioManager.RINGER_MODE_VIBRATE -> "Vibrate"
-            AudioManager.RINGER_MODE_NORMAL -> "Normal"
-            else -> "DND"
-        }
-    }
-
     private fun restoreOriginalState() {
         if (smartRestoreEngine.isSnapshotTaken()) {
             smartRestoreEngine.restore()
-            logAutomation(null, "Restored original state")
+            logAutomation(null, "Restored Original State")
             updateNotification("Monitoring triggers...")
         }
     }
@@ -228,11 +195,7 @@ class SilencerService : LifecycleService() {
             }
         }
         val notification = createNotification(content)
-        try {
-            notificationManager.notify(notificationId, notification)
-        } catch (e: SecurityException) {
-            Log.e(tag, "Notification permission missing", e)
-        }
+        notificationManager.notify(notificationId, notification)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

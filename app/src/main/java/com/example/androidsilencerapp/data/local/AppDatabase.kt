@@ -6,12 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.androidsilencerapp.data.model.AutomationLog
 import com.example.androidsilencerapp.data.model.Profile
+import com.example.androidsilencerapp.data.model.CalendarException
 
-@Database(entities = [Profile::class, AutomationLog::class], version = 2, exportSchema = false)
+@Database(entities = [Profile::class, AutomationLog::class, CalendarException::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun profileDao(): ProfileDao
     abstract fun automationLogDao(): AutomationLogDao
+    abstract fun calendarExceptionDao(): CalendarExceptionDao
 
     companion object {
         @Volatile
@@ -24,7 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "silencer_database"
                 )
-                .fallbackToDestructiveMigration() // Added to handle schema changes during development
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

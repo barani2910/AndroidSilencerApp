@@ -25,8 +25,9 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     init {
         val database = AppDatabase.getDatabase(application)
         val profileDao = database.profileDao()
-        val syncManager = FirebaseSyncManager(profileDao)
-        repository = ProfileRepository(profileDao, syncManager, application)
+        val exceptionDao = database.calendarExceptionDao()
+        val syncManager = FirebaseSyncManager(profileDao, exceptionDao)
+        repository = ProfileRepository(profileDao, exceptionDao, syncManager, application)
     }
 
     fun updateCurrentProfile(profile: Profile) {

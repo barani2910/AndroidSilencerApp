@@ -3,12 +3,15 @@ package com.example.androidsilencerapp.data.repository
 import android.content.Context
 import androidx.lifecycle.LiveData
 import com.example.androidsilencerapp.data.local.ProfileDao
+import com.example.androidsilencerapp.data.local.CalendarExceptionDao
 import com.example.androidsilencerapp.data.model.Profile
+import com.example.androidsilencerapp.data.model.CalendarException
 import com.example.androidsilencerapp.data.remote.FirebaseSyncManager
 import com.google.firebase.auth.FirebaseAuth
 
 class ProfileRepository(
     private val profileDao: ProfileDao,
+    private val exceptionDao: CalendarExceptionDao,
     private val syncManager: FirebaseSyncManager,
     private val context: Context
 ) {
@@ -39,12 +42,32 @@ class ProfileRepository(
     suspend fun deleteProfile(profile: Profile) {
         profileDao.deleteProfile(profile)
         if (isAutoSyncEnabled()) {
-            syncManager.deleteProfile(profile.id)
+                syncManager.deleteProfile(profile.id)
         }
     }
 
+    // Calendar Exception Methods
+    suspend fun addCalendarException(date: Long) {
+        val exception = CalendarException(date, userId)
+        exceptionDao.addException(exception)
+        if (isAutoSyncEnabled()) {
+            syncManager.uploadCalendarException(exception)
+        }
+    }
+
+    suspend fun removeCalendarException(date: Long) {
+        exceptionDao.removeException(CalendarException(date, userId))
+        if (isAutoSyncEnabled()) {
+            syncManager.deleteCalendarException(date)
+        }
+    }
+
+    suspend fun isDateExceptional(date: Long): Boolean {
+        return exceptionDao.isDateExceptional(date)
+    }
+
     suspend fun syncWithCloud() {
-        syncManager.syncAllProfiles()
+        syncManager.syncAllData()
     }
 
     private fun isAutoSyncEnabled(): Boolean {

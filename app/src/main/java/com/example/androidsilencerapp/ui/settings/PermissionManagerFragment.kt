@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -58,6 +57,16 @@ class PermissionManagerFragment : Fragment() {
             val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
             startActivity(intent)
         }
+
+        // Handle Emergency Bypass Permissions (Calls and SMS)
+        binding.btnEmergencyPerms.setOnClickListener {
+            val permissions = arrayOf(
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.READ_CALL_LOG,
+                Manifest.permission.RECEIVE_SMS
+            )
+            requestPermissionLauncher.launch(permissions)
+        }
     }
 
     override fun onResume() {
@@ -66,18 +75,21 @@ class PermissionManagerFragment : Fragment() {
     }
 
     private fun updatePermissionStatus() {
-        val locationGranted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val context = requireContext()
+        
+        val locationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         binding.btnLocationPerm.text = if (locationGranted) "Granted" else "Grant"
         binding.btnLocationPerm.isEnabled = !locationGranted
 
-        val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val dndGranted = notificationManager.isNotificationPolicyAccessGranted
         binding.btnDndPerm.text = if (dndGranted) "Granted" else "Grant"
         binding.btnDndPerm.isEnabled = !dndGranted
         
-        // Checking usage stats is more complex, usually we just check if we can get the service
-        // but for simplicity in UI:
-        binding.btnUsagePerm.text = "Manage"
+        val emergencyGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED &&
+                               ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+        binding.btnEmergencyPerms.text = if (emergencyGranted) "Granted" else "Grant Access"
+        binding.btnEmergencyPerms.isEnabled = !emergencyGranted
     }
 
     override fun onDestroyView() {
